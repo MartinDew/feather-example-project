@@ -1,0 +1,31 @@
+CompileFlags:
+  # Treat code as C++
+  Add: [-xc++, -Wall, -std=c++2c, "/std:c++latest"]
+
+  # Include directories
+  # Adjust these paths based on your actual project structure
+  Add: [
+    -I.
+  ]
+
+Diagnostics:
+  # Tweak specific diagnostics
+  Suppress:
+    - c++98-compat
+    - unused-parameter
+    - unused-variable
+
+  # Treat warnings as errors (optional)
+  # UnusedIncludes: Error
+  # ClangTidy:
+  #   Add: [performance-*, modernize-*]
+  #   Remove: [modernize-use-trailing-return-type]
+
+InlayHints:
+  Enabled: true
+  ParameterNames: true
+  DeducedTypes: true
+
+Index:
+  Background: Build
+  StandardLibrary: Yes
