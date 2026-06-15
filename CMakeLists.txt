@@ -44,7 +44,8 @@ message(STATUS "  Build directory: ${FEATHER_BUILD_DIR}")
 # ---------------------------------------------------------------------------
 # Project shared library
 # ---------------------------------------------------------------------------
-add_library(example SHARED src/project_main.cpp
+add_library(example SHARED
+        src/project_main.cpp
         src/extension.cpp
         src/defs.h)
 

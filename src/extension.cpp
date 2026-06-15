@@ -1,9 +1,9 @@
 #include "defs.h"
 
-#include <core/resources/native_extension.h>
+#include <core/resources/extension.h>
 
 using namespace feather;
 
-extern "C" EXPORT NativeExtension* _load_extension() {
-	return new NativeExtension("example", "register_project_types");
+extern "C" EXPORT Extension* _load_extension() {
+	return new Extension("example", "register_project_types");
 }
