@@ -47,7 +47,9 @@ message(STATUS "  Build directory: ${FEATHER_BUILD_DIR}")
 add_library(example SHARED
         src/project_main.cpp
         src/extension.cpp
-        src/defs.h)
+        src/defs.h
+        src/TestEcsModule.cpp
+        src/TestEcsModule.h)
 
 target_link_libraries(example PRIVATE Feather::Editor)
 
