@@ -8,7 +8,7 @@ set_languages("cxx23")
 add_rules("mode.debug", "mode.releasedbg", "mode.release")
 
 option("feather_sdk_path")
-    set_default(nil)
+    set_default("")
     set_showmenu(true)
     set_description("Absolute path to a FeatherEngine checkout")
 option_end()
