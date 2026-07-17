@@ -15,5 +15,4 @@ extern "C" EXPORT void register_project_types() {
   // since the DLL is linked against the engine's import lib.
 
     std::cout << "Registering TestModule!\n";
-    ClassDB::register_class<TestEcsModule>();
 }

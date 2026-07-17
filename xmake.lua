@@ -1,7 +1,7 @@
--- Discovery order mirrors the old CMake find_package(Feather) fallback:
+-- Discovery order for the FeatherEngine checkout:
 --   1. xmake config option:  xmake f --feather_sdk_path=/path/to/FeatherEngine
---   2. feather_dir.txt file in this project's root (gitignored)
---   3. FEATHER_ROOT environment variable
+--   2. FEATHER_ROOT environment variable
+--   3. Sibling ../FeatherEngine next to this project (zero-config default)
 set_xmakever("2.9.0")
 set_project("example")
 set_languages("cxx23")
@@ -13,21 +13,31 @@ option("feather_sdk_path")
     set_description("Absolute path to a FeatherEngine checkout")
 option_end()
 
--- Note: error()/raise()/os.raise()/assert() are all unavailable at this
--- (description) scope -- only usable inside callbacks like on_load/before_build.
--- So an unresolved root can't hard-fail cleanly here; print guidance and skip
--- includes(), letting the later feather_sdk_setup() call fail naturally.
+-- Note on the description-scope sandbox: only a restricted set of globals is
+-- available here (no io, no os.readfile, no import, no pcall/error/assert --
+-- those exist only inside callbacks like on_load/before_build). That is why the
+-- root can only come from things readable at this scope: the config option
+-- (has_config/get_config), an env var (os.getenv), and on-disk probing
+-- (os.isfile). An unresolved root therefore can't hard-fail cleanly; we print
+-- guidance and skip includes(), letting a later build fail naturally.
+--
+-- Also note xmake evaluates this scope several times per `xmake f`; on the
+-- first pass or two has_config() is still false because the option value has
+-- not been resolved yet. That is fine -- a later pass resolves it and the value
+-- persists to subsequent `xmake` invocations via the config cache.
+local function feather_root_has_sdk(root)
+    return root and root ~= "" and os.isfile(path.join(root, "tools", "FeatherSDK.lua"))
+end
+
 local function resolve_feather_root()
     if has_config("feather_sdk_path") then
-        return get_config("feather_sdk_path")
-    end
-    local dirfile = path.join(os.projectdir(), "feather_dir.txt")
-    if os.isfile(dirfile) then
-        local p = io.readfile(dirfile):trim()
+        local p = get_config("feather_sdk_path")
         if p and p ~= "" then return p end
     end
     local env = os.getenv("FEATHER_ROOT")
     if env and env ~= "" then return env end
+    local sibling = path.join(os.projectdir(), "..", "FeatherEngine")
+    if feather_root_has_sdk(sibling) then return sibling end
     return nil
 end
 
@@ -53,6 +63,6 @@ else
     -- before that registration completes).
     print("[feather] Could not locate a FeatherEngine checkout. Set one of:")
     print("[feather]   xmake f --feather_sdk_path=/path/to/FeatherEngine")
-    print("[feather]   echo /path/to/FeatherEngine > feather_dir.txt   (gitignored)")
     print("[feather]   export FEATHER_ROOT=/path/to/FeatherEngine")
+    print("[feather]   place the engine at ../FeatherEngine next to this project")
 end
