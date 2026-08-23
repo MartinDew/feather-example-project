@@ -1,4 +1,4 @@
-// #include "TestEcsModule.h"
+#include "TestEcsModule.h"
 //
 // // #include <input/inputs.h>
 // #include <math/transform.h>
