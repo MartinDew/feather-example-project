@@ -9,7 +9,7 @@ namespace feather {
 using EcsModule = feather::EcsFeature;
 
 class TestEcsModule : public EcsModule {
-	FCLASS();
+	FCLASS(EcsModule);
 
 	[[get(protected), set(public)]]
 	int foo;
