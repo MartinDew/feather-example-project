@@ -1,18 +1,19 @@
 #pragma once
+#include <core/world/ecs_module.h>
 #include <world/ecs_defs.h>
-#include <core/world/ecs_feature.h>
 
 #include "TestEcsModule.gen.h"
 
 namespace feather {
 
-using EcsModule = feather::EcsFeature;
+using EcsModule = feather::EcsModule;
 
 class TestEcsModule : public EcsModule {
 	FCLASS(EcsModule);
 
 	[[get(protected), set(public)]]
 	int foo;
+
 public:
 	TestEcsModule(World world);
 	~TestEcsModule() override;
