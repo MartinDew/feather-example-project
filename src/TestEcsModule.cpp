@@ -4,7 +4,7 @@
 #include <math/transform.h>
 #include <resources/mesh.h>
 #include <resources/resource_loader.h>
-#include <world/rendering_world_feature.h>
+#include <world/rendering_world_module.h>
 
 namespace feather {
 

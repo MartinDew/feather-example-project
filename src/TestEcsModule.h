@@ -6,8 +6,6 @@
 
 namespace feather {
 
-using EcsModule = feather::EcsModule;
-
 class TestEcsModule : public EcsModule {
 	FCLASS(EcsModule);
 
