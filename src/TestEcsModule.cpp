@@ -17,7 +17,7 @@ TestEcsModule::TestEcsModule(World world) {
 	auto agadou = ws->create_scene("agadou");
 	ws->set_active_scene(agadou);
 	auto w = ws->get_world();
-	auto sponza_e = w->entity<Transform>("sponza").emplace<MeshInstance>(sponza);
+	auto sponza_e = w->entity("sponza").add<Transform>().emplace<MeshInstance>(sponza);
 
 	sponza_e.child_of(agadou);
 }
