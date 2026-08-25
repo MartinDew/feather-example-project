@@ -25,6 +25,7 @@ compile_commands.json
 
 env/
 build/
+bin/
 CMakeUserPresets.json
 logs/
 feather_dir.txt
