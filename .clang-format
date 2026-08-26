@@ -159,6 +159,7 @@ SpaceBeforeCpp11BracedList: true
 # SpacesInConditionalStatement: false
 # SpacesInContainerLiterals: true
 # SpacesInCStyleCastParentheses: false
+## our comment capitalization at the same time.
 SpacesInLineCommentPrefix:
   Minimum:         0
   Maximum:         -1

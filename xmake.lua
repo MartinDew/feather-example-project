@@ -26,7 +26,7 @@ option_end()
 -- not been resolved yet. That is fine -- a later pass resolves it and the value
 -- persists to subsequent `xmake` invocations via the config cache.
 local function feather_root_has_sdk(root)
-    return root and root ~= "" and os.isfile(path.join(root, "tools", "FeatherSDK.lua"))
+    return root and root ~= "" and os.isfile(path.join(root, "tools", "SDK", "FeatherSDK.lua"))
 end
 
 local function resolve_feather_root()
@@ -43,10 +43,11 @@ end
 
 local FEATHER_ROOT = resolve_feather_root()
 if FEATHER_ROOT then
-    includes(path.join(FEATHER_ROOT, "tools", "FeatherSDK.lua"))
+    includes(path.join(FEATHER_ROOT, "tools", "SDK", "FeatherSDK.lua"))
 
-    -- Old CMakeLists.txt linked Feather::Editor specifically.
-    feather_sdk_setup("example", "editor")
+    -- "example", not default "src", so the generated entry point can't be
+    -- confused with the hand-written register_project_types below.
+    feather_sdk_setup("example", {codegen_dirs = {{dir = "src", name = "example"}}})
 
     -- Separate, reopened block: feather_sdk_setup() opens and closes its own
     -- target scope internally, so this must come after it, not nested inside it.
