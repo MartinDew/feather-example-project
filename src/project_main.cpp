@@ -1,10 +1,19 @@
-#include <iostream>
-#include <core/math/transform.h>
+#include "defs.h"
 
-extern "C" EXPORT void register_project_types() {
-  std::cout << "Hello from example project DLL! This is dynamically loaded by "
-               "the engine."
-            << std::endl;
-  // Here we can use ClassDB to register types using engine headers,
-  // since the DLL is linked against the engine's import lib.
+#include <core/main/init_level.h>
+
+#include <iostream>
+
+using namespace feather;
+
+// Called once per initialization level the engine enters, ascending. The name
+// is the one passed to Extension() in extension.cpp.
+extern "C" EXPORT void register_project_types(InitLevel level) {
+	if (level != InitLevel::Core) {
+		return;
+	}
+
+	std::cout << "[cpp_example] Hello from the example project's C++ extension." << std::endl;
+	// ClassDB registration goes here: this DLL sees the engine's real headers
+	// and binds to its symbols, so anything the engine can do, it can do.
 }

@@ -1,0 +1,11 @@
+{
+    "fext_version": 1,
+    "name": "c_example",
+    "type": "native",
+    "entry": "register_c_example",
+    "libraries": {
+        "linux.x86_64": "../../bin/libc_example.so",
+        "windows.x86_64": "../../bin/c_example.dll",
+        "macos.arm64": "../../bin/libc_example.dylib"
+    }
+}
