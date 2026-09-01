@@ -2,7 +2,7 @@
     "fext_version": 1,
     "name": "cs_example",
     "type": "native",
-    "entry": "register_cs_example",
+    "entry": "feather_cs_plugin_entry",
     "libraries": {
         "linux.x86_64": "../../bin/libcs_example.so",
         "windows.x86_64": "../../bin/cs_example.dll",

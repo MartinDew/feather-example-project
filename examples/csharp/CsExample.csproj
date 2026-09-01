@@ -24,9 +24,18 @@
     <Compile Include="$(FeatherCsharpDir)/**/*.cs" />
   </ItemGroup>
 
+  <!-- The SDK's bootstrap finds this plugin's components and systems by
+       reflecting over the assembly, and NativeAOT trims what it cannot see
+       being used. Rooting the assembly keeps those types and methods, and the
+       metadata needed to invoke them, in the published binary. -->
+  <ItemGroup>
+    <TrimmerRootAssembly Include="CsExample" />
+  </ItemGroup>
+
   <!-- No rpath, and nothing pointing into an engine build tree: the P/Invokes
-       are resolved at runtime against the copy of libfeather_c the engine has
-       already loaded (see CsExample.cs's resolver). That is what lets this
-       plugin be built and shipped without knowing where the engine lives. -->
+       are resolved at runtime against the engine process, which exports the C
+       bindings (see the SDK's FeatherPluginBootstrap.cs). That is what lets
+       this plugin be built and shipped without knowing where the engine
+       lives. -->
 
 </Project>

@@ -157,7 +157,10 @@ check_export() {
     fi
 }
 check_export bin/libc_example.so register_c_example
-check_export bin/libcs_example.so register_cs_example
+# A fixed name the SDK's bootstrap exports, not one this plugin wrote: every C#
+# plugin's manifest names the same entry point, so there is nothing to keep in
+# sync between the manifest and the source.
+check_export bin/libcs_example.so feather_cs_plugin_entry
 # The C++ example stays on the probing path, so it keeps the older ABI.
 check_export bin/libcpp_example.so _load_extension
 check_export bin/libcpp_example.so _destroy_extension
@@ -270,6 +273,18 @@ if [ "$RUN_PYTHON" -eq 1 ]; then
     # A field type with no fixed layout is refused by name, not mislaid.
     assert_contains "unstorable field type is refused" "$ENGINE_LOG" \
         "[ecs_demo] string field refused:"
+fi
+
+# The C# plugin declares its component and system with attributes and exports no
+# entry point of its own; the bootstrap finds them by reflecting over the
+# assembly. Asserted separately from the Python checks, which need py_host.
+assert_contains "C# component was registered from an attribute" "$ENGINE_LOG" \
+    "[cs_example] spin initial speed 0.0 ticks 0 axis <0, 0, 0>"
+assert_contains "C# component round-trips writes" "$ENGINE_LOG" \
+    "[cs_example] spin seeded speed 1.0 axis <10, 20, 30>"
+
+if [ "$RUN_PYTHON" -eq 1 ]; then
+    :
 else
     echo "  (python example skipped: no $PY_MODULE)"
 fi

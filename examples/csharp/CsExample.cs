@@ -1,75 +1,34 @@
 // A Feather extension written in C#, against C# bindings generated from the
 // engine's published API description (api/feather_api.json). Those bindings are
-// P/Invoke declarations over libfeather_c, so this file drives the same C entry
-// points the C example calls -- just through the generated idiomatic wrappers.
+// P/Invoke declarations over the C bindings compiled into the engine, so this
+// file drives the same C entry points the C example calls -- just through the
+// generated idiomatic wrappers.
 //
 // Published with NativeAOT (NativeLib=Shared), so the result is an ordinary
-// native shared library exporting the entry point below. The engine dlopens it
-// exactly like a C or C++ extension and never learns there is a .NET runtime
-// inside.
+// native shared library. The engine dlopens it exactly like a C or C++ extension
+// and never learns there is a .NET runtime inside.
 //
-// The engine finds it through cs_example.fext, the manifest next to this file,
-// which names that entry point. Without a manifest an extension has to hand
-// back a C++ Extension object, which meant constructing one through hand-written
-// P/Invoke declarations and getting its ownership right; the manifest removes
-// that requirement entirely.
+// Note what is *not* here. There is no entry point, no DllImport resolver and no
+// dispatch on the init level: the SDK ships those once
+// (sdk/csharp/FeatherPluginBootstrap.cs), and finds the code below by reflecting
+// over the assembly. cs_example.fext names the SDK's fixed entry point, so there
+// is no name to keep in sync either. Compare examples/c/c_example.c, which has
+// to export its entry point by hand because C has no way to be found.
 
 using System;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
+using System.Numerics;
+using FeatherPlugin;
 
 internal static class CsExample {
-
-	// The generated [DllImport]s name the library "feather_c" with no path.
-	// .NET would turn that into a dlopen of several candidate spellings, and
-	// loading a second copy would give this extension its own set of engine
-	// globals. The engine has already loaded libfeather_c into the global
-	// symbol scope before it loads any extension, so the reliable answer is
-	// the main program's handle: a lookup there finds the copy the process
-	// already has, without naming a file at all.
-	//
-	// Resolving explicitly also turns a lookup failure into a readable message
-	// instead of an abort: an exception escaping an UnmanagedCallersOnly entry
-	// point cannot cross back into C, so the runtime just calls abort().
-	[ModuleInitializer]
-	internal static void RegisterResolver() {
-		NativeLibrary.SetDllImportResolver(typeof(CsExample).Assembly, static (name, assembly, searchPath) => {
-			if (name != "feather_c") {
-				return IntPtr.Zero;
-			}
-			// The global scope, which the engine's preload put feather_c into.
-			IntPtr main = NativeLibrary.GetMainProgramHandle();
-			if (NativeLibrary.TryGetExport(main, "feather_to_string", out _)) {
-				return main;
-			}
-			// Fallback for running outside the engine (a test host, say).
-			if (NativeLibrary.TryLoad("libfeather_c.so", out IntPtr handle)) {
-				return handle;
-			}
-			Console.Error.WriteLine("[cs_example] could not resolve libfeather_c");
-			return IntPtr.Zero;
-		});
-	}
 
 	// Mirrors feather::InitLevel, which crosses the boundary as a uint8_t.
 	private const byte InitLevelCore = 0;
 
-	[DllImport("feather_c", EntryPoint = "feather_to_string", ExactSpelling = true)]
-	private static extern IntPtr InitLevelToString(byte level);
-
-	// The entry point named by cs_example.fext. Called once per initialization
-	// level the engine enters, ascending.
-	[UnmanagedCallersOnly(EntryPoint = "register_cs_example")]
-	public static void Register(byte level) {
-		try {
-			RegisterCore(level);
-		} catch (Exception ex) {
-			Console.Error.WriteLine($"[cs_example] register failed: {ex}");
-		}
-	}
-
-	private static void RegisterCore(byte level) {
-		Console.WriteLine($"[cs_example] init level '{Marshal.PtrToStringUTF8(InitLevelToString(level))}' entered");
+	// Called at each init level, ascending -- the same shape the C example's
+	// exported entry point gets, without having to export anything.
+	[FeatherInit]
+	private static void OnInitLevel(byte level) {
+		Console.WriteLine($"[cs_example] init level '{InitLevelName(level)}' entered");
 
 		if (level != InitLevelCore) {
 			return;
@@ -90,5 +49,59 @@ internal static class CsExample {
 		using var reversed = projection.CreateReverseZ();
 		Console.WriteLine($"[cs_example]   reverse-Z variant : near {reversed.GetNearPlane():F2}, "
 				+ $"far {reversed.GetFarPlane():F2}, reverse-Z {(reversed.IsReverseZ() ? "yes" : "no")}");
+
+		DefineEcsTypes();
+	}
+
+	// The generated wrapper for feather::to_string is not usable here: it renders
+	// a `const char*` return as `byte?` and hands back only the first byte. The
+	// generated enum carries the same names, so ask it instead.
+	private static string InitLevelName(byte level) => ((Feather.InitLevel)level).ToString();
+
+	// An ECS component, declared the same way the Python example declares one --
+	// a type with fields. It is never instantiated; it describes a layout.
+	[FeatherComponent]
+	private struct Spin {
+		public float Speed;
+		public int Ticks;
+		public Vector3 Axis;
+	}
+
+	// A system over it. Components are named as strings, so this could equally
+	// query the engine's own "Transform".
+	[FeatherSystem("Spin", Phase = "on_update")]
+	private static void Advance(ulong entity, ComponentView[] components, double deltaTime) {
+		ComponentView spin = components[0];
+
+		int ticks = spin.GetInt("Ticks");
+		if (ticks >= 3) {
+			return;
+		}
+
+		spin.SetInt("Ticks", ticks + 1);
+		spin.SetFloat("Speed", spin.GetFloat("Speed") + 2.5f);
+
+		Vector3 axis = spin.GetVector3("Axis");
+		spin.SetVector3("Axis", axis + new Vector3(1.0f, 2.0f, 3.0f));
+
+		Console.WriteLine($"[cs_example] tick {ticks + 1}: speed {spin.GetFloat("Speed"):F1} "
+				+ $"axis {spin.GetVector3("Axis")}");
+	}
+
+	private static void DefineEcsTypes() {
+		// The component and system above were registered by the bootstrap
+		// before this ran; what is left is to give the system something to
+		// match.
+		ulong entity = World.Spawn("SpinDemo", "Spin");
+		ComponentView view = World.View(entity, "Spin");
+
+		Console.WriteLine($"[cs_example] spin initial speed {view.GetFloat("Speed"):F1} "
+				+ $"ticks {view.GetInt("Ticks")} axis {view.GetVector3("Axis")}");
+
+		view.SetFloat("Speed", 1.0f);
+		view.SetVector3("Axis", new Vector3(10.0f, 20.0f, 30.0f));
+
+		Console.WriteLine($"[cs_example] spin seeded speed {view.GetFloat("Speed"):F1} "
+				+ $"axis {view.GetVector3("Axis")}");
 	}
 }
