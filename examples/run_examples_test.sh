@@ -11,7 +11,7 @@
 #
 # Usage: examples/run_examples_test.sh [path/to/FeatherEngine]
 # The engine may also come from $FEATHER_ROOT. It must be built, with its C
-# bindings (xmake build feather c_bindings).
+# bindings (xmake build feather).
 
 set -uo pipefail
 
@@ -62,10 +62,10 @@ assert_absent() {
 ENGINE_ROOT="${1:-${FEATHER_ROOT:-}}"
 if [ -z "$ENGINE_ROOT" ]; then
     for candidate in "$PROJECT_DIR"/../FeatherEngine*; do
-        # The shipped bindings library, not the build tree it came from: that is
-        # what the engine actually loads at startup, and its absence is exactly
-        # what would make the C and C# extensions fail.
-        if [ -f "$candidate/build/bin/libfeather_c.so" ]; then
+        # A built engine binary, not just a checkout: the C bindings are
+        # compiled into it, so it is what the C and C# extensions resolve
+        # their imports against.
+        if [ -x "$candidate/build/bin/feather" ]; then
             ENGINE_ROOT="$(cd "$candidate" && pwd)"
             break
         fi
@@ -81,14 +81,28 @@ fi
 ENGINE_BIN="$ENGINE_ROOT/build/bin/feather"
 echo "engine: $ENGINE_ROOT"
 
-for required in "$ENGINE_BIN" "$ENGINE_ROOT/build/bin/libfeather_c.so"; do
-    if [ ! -e "$required" ]; then
-        echo "error: missing $required" >&2
-        echo "       Build the engine and its C bindings first:" >&2
-        echo "         cd $ENGINE_ROOT && xmake build feather c_bindings" >&2
-        exit 2
-    fi
-done
+if [ ! -e "$ENGINE_BIN" ]; then
+    echo "error: missing $ENGINE_BIN" >&2
+    echo "       Build the engine first:" >&2
+    echo "         cd $ENGINE_ROOT && xmake build feather" >&2
+    exit 2
+fi
+
+# The bindings are compiled into the engine rather than shipped beside it, so
+# their absence looks like a normal engine binary until a plugin fails to
+# resolve. Check up front, where the message can say what to rebuild.
+# Matched with bash's own pattern operator rather than a pipe into grep -q:
+# under `set -o pipefail` a grep that exits at its first match closes the pipe,
+# the writer dies of SIGPIPE, and the pipeline reports failure even though the
+# symbol was found. The engine's symbol table is several megabytes, so that is
+# not a rare race here -- it happens every run.
+engine_exports="$(nm -D --defined-only "$ENGINE_BIN" 2>/dev/null || true)"
+if [[ "$engine_exports" != *" T Feather_"* ]]; then
+    echo "error: $ENGINE_BIN exports no Feather_* symbols." >&2
+    echo "       It was built without the C bindings; the C and C# examples cannot load." >&2
+    echo "         cd $ENGINE_ROOT && xmake f --enable_c_bindings=y -y && xmake build feather" >&2
+    exit 2
+fi
 
 # The Python example needs the embedded interpreter (--enable_py_host) and the
 # shipped module; both are optional, so its checks are skipped without them.
@@ -130,10 +144,13 @@ check_export() {
     # still writing when grep leaves -- which made this look like a flaky
     # missing export on the largest plugin alone.
     symbols=$(nm -D --defined-only "$lib" 2>/dev/null)
+    # ... and fed to grep from a here-string rather than a pipe, because a
+    # capture alone does not close the hole: `grep -q` still exits early and
+    # SIGPIPEs whatever is writing into it. A here-string is a file, not a pipe.
     # Not anchored at the end: NativeAOT decorates its exports with a version
     # suffix (register_cs_example@@V1.0), which the dynamic linker resolves by
     # the base name the manifest gives it.
-    if printf '%s\n' "$symbols" | grep -qE " $sym(@|\$)"; then
+    if grep -qE " $sym(@|\$)" <<< "$symbols"; then
         pass "$(basename "$lib") exports $sym"
     else
         fail "$(basename "$lib") does not export $sym"
@@ -187,7 +204,15 @@ assert_contains "C# plugin loaded from its manifest" "$ENGINE_LOG" \
     "FextFormatLoader: Loaded extension 'cs_example'"
 assert_contains "C++ plugin loaded by symbol probing" "$ENGINE_LOG" \
     "ExtensionFormatLoader: Loaded extension 'example'"
-assert_contains "engine loaded its C bindings" "$ENGINE_LOG" "Engine: Loaded C bindings from"
+# The bindings are part of the engine binary, so there is nothing to load at
+# startup and no separate library to ship. A stray one next to the engine would
+# mean the old split build came back -- and would be silently preferred by
+# anything still looking for it by name.
+if [ -e "$ENGINE_ROOT/build/bin/libfeather_c.so" ] || [ -e "$ENGINE_ROOT/build/bin/feather_c.dll" ]; then
+    fail "no separate bindings library beside the engine (found one in $ENGINE_ROOT/build/bin)"
+else
+    pass "no separate bindings library beside the engine"
+fi
 
 # The loader is quiet about libraries it rejects, so absence of these is the
 # only signal that nothing was silently skipped.

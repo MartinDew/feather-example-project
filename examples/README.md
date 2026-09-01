@@ -21,10 +21,10 @@ no FeatherEngine checkout, no engine headers, no Clang, and nothing linked
 against the engine at build time. It is the same shape as a GDExtension project
 building from `extension_api.json`.
 
-What makes that work at runtime is that the engine ships the compiled other half
-(`libfeather_c`) and loads it into the global symbol scope before it loads any
-extension. A plugin's `feather_*` imports are simply left undefined and bind
-then. Check it yourself:
+What makes that work at runtime is that the engine *is* the compiled other half:
+the generated glue is built into the engine binary, which exports it along with
+the rest of its API. A plugin's `feather_*` imports are simply left undefined
+and bind to the engine process when it is loaded. Check it yourself:
 
     readelf -d bin/libc_example.so | grep NEEDED   # nothing feather-related
 
@@ -50,9 +50,10 @@ The engine must be built first, with its C bindings:
 
     cd ../FeatherEngine
     xmake f -m debug -y --enable_py_host=y
-    xmake build feather c_bindings py_bindings
+    xmake build feather py_bindings
 
 `--enable_py_host` and `py_bindings` are only needed for the Python example.
+The C bindings need no separate target: they are part of `feather` itself.
 
 Then, from this project:
 
@@ -117,11 +118,11 @@ main loop, which is what makes this terminate.
   pair with `feather_*_Destroy`. C# wraps those in `IDisposable`. Python lets the
   interpreter's refcount do it. The same sequence appears under all three.
 - **C# needs an explicit `DllImportResolver`.** The generated `[DllImport]`s name
-  `feather_c` with no path, and .NET's default probing does not find it from
-  inside a dlopened extension. Worse, an exception escaping an
-  `UnmanagedCallersOnly` entry point cannot propagate into C, so the failure
-  arrives as a bare `abort()`. `CsExample.cs` resolves against the main program's
-  handle -- the copy the engine already loaded -- and guards its entry point.
+  `feather_c`, which is not a file on disk at all -- the bindings live in the
+  engine binary -- and .NET's default probing would look for a library. Worse, an
+  exception escaping an `UnmanagedCallersOnly` entry point cannot propagate into
+  C, so the failure arrives as a bare `abort()`. `CsExample.cs` resolves the name
+  against the main program's handle and guards its entry point.
 - **Keep build output out of the project directory.** `index_project()` walks the
   project with a plain recursive iterator and no skip list, not even for
   dot-directories, so every `.so` under it is opened. That is why the C# target
