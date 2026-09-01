@@ -46,8 +46,10 @@ feather_cs_plugin("cs_example", {
     csproj = "examples/csharp/CsExample.csproj",
     api_json = API_JSON,
     -- dotnet names the output after the assembly; the manifest names the file
-    -- the engine loads. published_name defaults to CsExample.so, and
-    -- output_name to lib<target>.so, which is what cs_example.fext points at.
+    -- the engine loads. Both are left at the SDK's defaults, which already
+    -- vary by host OS to match cs_example.fext's "libraries" table: the
+    -- published assembly is CsExample.{dll,so,dylib}, staged into bin/ as
+    -- cs_example.dll on Windows or libcs_example.{so,dylib} elsewhere.
 })
 
 -- ---- C++ example, built against the engine itself -------------------------
