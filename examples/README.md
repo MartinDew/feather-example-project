@@ -24,7 +24,9 @@ building from `extension_api.json`.
 What makes that work at runtime is that the engine *is* the compiled other half:
 the generated glue is built into the engine binary, which exports it along with
 the rest of its API. A plugin's `feather_*` imports are simply left undefined
-and bind to the engine process when it is loaded. Check it yourself:
+and bind to the engine process when it is loaded -- on Windows through an import
+table naming the engine executable, which the SDK generates locally. Check it
+yourself:
 
     readelf -d bin/libc_example.so | grep NEEDED   # nothing feather-related
 
@@ -79,11 +81,15 @@ Populate it, and refresh it after any engine API change, with:
     cd ../FeatherEngine && xmake export-api
     cp build/bindings/dist/* ../feather-example-project/api/
 
+Two files, on every platform -- nothing binary, and no import library. Windows
+does need one, because a PE image resolves imports through a table the linker
+only writes if it was given one, but the SDK builds it from the generated
+headers at plugin build time rather than shipping it. That keeps the input to a
+plugin the same everywhere: the JSON.
+
 `feather_api.meta.json` records which engine build and mrbind revision produced
 the API file, so a mismatch between your generated headers and the engine you
-load into is reported rather than discovered as a crash. On Windows the export
-also carries the import library the plugin links against; on ELF and Mach-O
-there is nothing to link, so the two JSON files are the whole input.
+load into is reported rather than discovered as a crash.
 
 ## Testing
 
