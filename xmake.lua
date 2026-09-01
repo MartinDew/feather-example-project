@@ -27,38 +27,17 @@ option("feather_sdk_path")
     set_description("Absolute path to a FeatherEngine checkout (only needed for the C++ example)")
 option_end()
 
--- ---- Language examples, built from the published API ----------------------
+-- ---- Locating a FeatherEngine checkout ------------------------------------
 
-includes("sdk/FeatherPluginSDK.lua")
-feather_plugin_sdk_init()
-
-local API_JSON = "api/feather_api.json"
-
--- examples/c -- a Feather extension in plain C.
-feather_c_plugin("c_example", {
-    files = "examples/c/c_example.c",
-    api_json = API_JSON,
-})
-
--- examples/csharp -- the same extension in C#, published with NativeAOT so the
--- result is an ordinary native shared library.
-feather_cs_plugin("cs_example", {
-    csproj = "examples/csharp/CsExample.csproj",
-    api_json = API_JSON,
-    -- dotnet names the output after the assembly; the manifest names the file
-    -- the engine loads. Both are left at the SDK's defaults, which already
-    -- vary by host OS to match cs_example.fext's "libraries" table: the
-    -- published assembly is CsExample.{dll,so,dylib}, staged into bin/ as
-    -- cs_example.dll on Windows or libcs_example.{so,dylib} elsewhere.
-})
-
--- ---- C++ example, built against the engine itself -------------------------
-
+-- Resolved up here because two separate things need it: the published-API
+-- check below (to tell you where to regenerate api/ from) and the C++ example
+-- further down (which compiles against the engine's headers).
+--
 -- The description scope has no io/import/assert, so an unresolved engine root
--- can't fail cleanly here -- print guidance and skip the target instead.
--- Every candidate is checked for the SDK file rather than taken on trust: the
--- configured path in particular is cached by `xmake f` and outlives the
--- checkout it names, and includes()'ing a path that no longer exists fails
+-- can't fail cleanly here -- print guidance and skip the affected targets
+-- instead. Every candidate is checked for the SDK file rather than taken on
+-- trust: the configured path in particular is cached by `xmake f` and outlives
+-- the checkout it names, and includes()'ing a path that no longer exists fails
 -- later and much less clearly.
 local function is_feather_root(candidate)
     return candidate and candidate ~= ""
@@ -84,7 +63,9 @@ local function resolve_feather_root()
 
     for _, candidate in ipairs(os.dirs(path.join(os.projectdir(), "..", "FeatherEngine*"))) do
         if is_feather_root(candidate) then
-            return candidate
+            -- Collapse the ".." segment: this path is printed as copy-pasteable
+            -- guidance below, and is what includes() resolves against.
+            return path.normalize(candidate)
         end
     end
 
@@ -92,6 +73,51 @@ local function resolve_feather_root()
 end
 
 local FEATHER_ROOT = resolve_feather_root()
+
+-- ---- Language examples, built from the published API ----------------------
+
+includes("sdk/FeatherPluginSDK.lua")
+feather_plugin_sdk_init()
+
+local API_JSON = "api/feather_api.json"
+
+-- api/ is generated, not committed (see .gitignore and examples/README.md), so
+-- a fresh clone has none until someone exports it from an engine checkout.
+-- Skip with guidance rather than failing deep inside the SDK's generator step.
+if os.isfile(path.join(os.projectdir(), API_JSON)) then
+
+    -- examples/c -- a Feather extension in plain C.
+    feather_c_plugin("c_example", {
+        files = "examples/c/c_example.c",
+        api_json = API_JSON,
+    })
+
+    -- examples/csharp -- the same extension in C#, published with NativeAOT so
+    -- the result is an ordinary native shared library.
+    feather_cs_plugin("cs_example", {
+        csproj = "examples/csharp/CsExample.csproj",
+        api_json = API_JSON,
+        -- dotnet names the output after the assembly; the manifest names the
+        -- file the engine loads. Both are left at the SDK's defaults, which
+        -- already vary by host OS to match cs_example.fext's "libraries" table:
+        -- the published assembly is CsExample.{dll,so,dylib}, staged into bin/
+        -- as cs_example.dll on Windows or libcs_example.{so,dylib} elsewhere.
+    })
+
+else
+    print("[feather] No " .. API_JSON .. "; skipping the C and C# examples.")
+    if FEATHER_ROOT then
+        print("[feather] Generate it from the engine checkout found at " .. FEATHER_ROOT .. ":")
+        print("[feather]   cd " .. FEATHER_ROOT .. " && xmake export-api")
+        print("[feather]   cp " .. path.join(FEATHER_ROOT, "build", "bindings", "dist", "*")
+            .. " " .. path.join(os.projectdir(), "api") .. "/")
+    else
+        print("[feather] Run `xmake export-api` in a FeatherEngine checkout and copy")
+        print("[feather] its build/bindings/dist/ contents into " .. path.join(os.projectdir(), "api") .. "/")
+    end
+end
+
+-- ---- C++ example, built against the engine itself -------------------------
 
 if FEATHER_ROOT then
     includes(path.join(FEATHER_ROOT, "tools", "SDK", "FeatherSDK.lua"))

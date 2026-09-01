@@ -29,3 +29,10 @@ bin/
 CMakeUserPresets.json
 logs/
 feather_dir.txt
+
+# The published engine API, produced by `xmake export-api` in a FeatherEngine
+# checkout. Everything here is generated and machine-specific -- the metadata
+# records the absolute path and git revision of the engine tree it came from --
+# so it is fetched or regenerated per checkout, never committed. See
+# examples/README.md.
+api/

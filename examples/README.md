@@ -65,14 +65,24 @@ compiles the engine's real headers; it is discovered as a `FeatherEngine*`
 sibling, or named with `--feather_sdk_path=/path/to/FeatherEngine` or
 `FEATHER_ROOT`. Without one it is skipped and the rest still build.
 
-To refresh the API description after an engine API change:
+## Getting `api/`
+
+**`api/` is generated, not committed.** A fresh clone has none, and the C and C#
+targets are skipped (with instructions) until you populate it. Everything in it
+is machine-specific -- the metadata records the absolute path and git revision
+of the engine tree that produced it -- so it is regenerated per checkout rather
+than tracked in git.
+
+Populate it, and refresh it after any engine API change, with:
 
     cd ../FeatherEngine && xmake export-api
-    cp build/bindings/dist/feather_api.json build/bindings/dist/feather_api.meta.json ../feather-example-project/api/
+    cp build/bindings/dist/* ../feather-example-project/api/
 
 `feather_api.meta.json` records which engine build and mrbind revision produced
 the API file, so a mismatch between your generated headers and the engine you
-load into is reported rather than discovered as a crash.
+load into is reported rather than discovered as a crash. On Windows the export
+also carries the import library the plugin links against; on ELF and Mach-O
+there is nothing to link, so the two JSON files are the whole input.
 
 ## Testing
 
