@@ -250,6 +250,26 @@ TAGS="c_example cs_example"
 if [ "$RUN_PYTHON" -eq 1 ]; then
     TAGS="$TAGS py_example"
     assert_contains "python script ran inside the engine" "$ENGINE_LOG" "[py_example]"
+
+    # The .fpy path: no manifest, claimed by extension, and able to define ECS
+    # types rather than only call the engine.
+    assert_contains "bare .fpy script was found and run" "$ENGINE_LOG" \
+        "ScriptFormatLoader: Ran python script"
+    assert_contains "script defined an ECS component" "$ENGINE_LOG" \
+        "[ecs_demo] component Drift registered"
+    assert_contains "script defined a system over its own component" "$ENGINE_LOG" \
+        "[ecs_demo] system advance registered"
+    assert_contains "script defined a system over an engine component" "$ENGINE_LOG" \
+        "[ecs_demo] system over engine Transform registered"
+    # Storage really is the ECS's: zero-initialized on add, and readable back
+    # through the same accessors a system uses.
+    assert_contains "scripted component starts zero-initialized" "$ENGINE_LOG" \
+        "[ecs_demo] initial speed 0.0 steps 0 offset (0.0, 0.0, 0.0)"
+    assert_contains "scripted component round-trips writes" "$ENGINE_LOG" \
+        "[ecs_demo] seeded speed 1.0 offset (10.0, 20.0, 30.0)"
+    # A field type with no fixed layout is refused by name, not mislaid.
+    assert_contains "unstorable field type is refused" "$ENGINE_LOG" \
+        "[ecs_demo] string field refused:"
 else
     echo "  (python example skipped: no $PY_MODULE)"
 fi
