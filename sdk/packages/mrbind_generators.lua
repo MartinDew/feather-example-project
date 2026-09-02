@@ -115,7 +115,14 @@ package("mrbind_generators")
             -- Set as CMAKE_CXX_FLAGS rather than added to the cleared list
             -- above, since the project appends its own -D_ITERATOR_DEBUG_LEVEL=0
             -- to this same variable and both have to survive.
-            table.insert(configs, "-DCMAKE_CXX_FLAGS=/Zc:preprocessor")
+            --
+            -- /EHsc alongside it: cl.exe and clang-cl both default to
+            -- exceptions off unless told otherwise (unlike plain clang++,
+            -- which defaults them on -- part of why that one needed nothing
+            -- here). mrbind's source throws/catches throughout, and without
+            -- this every one of those sites fails with "cannot use 'throw'
+            -- with exceptions disabled" -- the whole build, not one file.
+            table.insert(configs, "-DCMAKE_CXX_FLAGS=/Zc:preprocessor /EHsc")
         end
 
         local builddir = path.join(package:builddir(), ".cmake_build")
