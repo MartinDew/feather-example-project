@@ -42,36 +42,42 @@ package("mrbind_generators")
 
         -- Which compiler actually builds this on Windows is not something we
         -- get to assume -- it depends on what a left-to-its-own-devices CMake
-        -- configure finds first, which varies by machine. On a real Windows
-        -- dev box that's normally cl.exe; on this project's own CI runner,
-        -- Windows LLVM's clang++.exe (installed and put ahead on PATH by the
-        -- workflow itself) is what gets picked instead. The two need opposite
-        -- handling: cl.exe defaults to a pre-C++17 mode with a preprocessor
-        -- that mishandles __VA_OPT__ and needs both worked around explicitly
-        -- (below); clang++ already gets both right unassisted -- confirmed by
-        -- a run where this whole block was accidentally skipped and clang++
-        -- still built and linked both generators cleanly -- and would reject
-        -- the MSVC-syntax flag this block passes outright ("clang++: error:
-        -- no such file or directory: '/Zc:preprocessor'", since a bare
-        -- '/whatever' reads as a path to a GNU-style driver).
+        -- configure finds first, which varies by machine, and even a
+        -- deliberately forced choice can turn out wrong in a way no flag
+        -- fixes: real cl.exe rejects mrbind's own use of C++23's auto(x)
+        -- decay-copy (src/common/strings.h) with a hard parser error on
+        -- every MSVC toolset through the whole VS 2022 generation -- it's
+        -- simply missing until MSVC 19.50 / VS 2026, not a matter of flags.
         --
-        -- So rather than pass MSVC flags whenever the host happens to be
-        -- Windows, cl.exe is found and pinned explicitly with find_tool -- the
-        -- same thing that makes the fixes below apply to it specifically,
-        -- deterministic regardless of what else is on PATH or in what order.
-        -- Nothing is added, and CMake configures however it would have
-        -- otherwise, when there is no cl.exe to find.
-        local cl = os.host() == "windows" and find_tool("cl") or nil
-        if cl then
-            table.insert(configs, "-DCMAKE_C_COMPILER=" .. cl.program)
-            table.insert(configs, "-DCMAKE_CXX_COMPILER=" .. cl.program)
+        -- clang-cl sidesteps that: same MSVC-style flag syntax as cl.exe (so
+        -- the fixes below still apply to it), but Clang's frontend has
+        -- supported auto(x) for a long time, independent of whichever VS
+        -- ships on a given machine. Preferred over cl.exe for exactly that
+        -- reason -- it is also the toolchain this project's own Windows CI
+        -- leg is configured for (--toolchain=clang-cl), which real cl.exe was
+        -- never actually part of the intent for, just what a bare
+        -- find_tool("cl") happened to prefer once it existed.
+        --
+        -- When neither is found, nothing here is added and CMake configures
+        -- however it already does successfully: plain clang++, which needs
+        -- none of this -- confirmed by a run where this whole block was
+        -- accidentally skipped and clang++ still built and linked both
+        -- generators cleanly on its own. It would, however, reject the
+        -- MSVC-syntax flag this block passes outright ("clang++: error: no
+        -- such file or directory: '/Zc:preprocessor'", a bare '/whatever'
+        -- reading as a path to a GNU-style driver), which is why the choice
+        -- has to be pinned explicitly rather than left for CMake to mix.
+        local compiler = os.host() == "windows" and (find_tool("clang-cl") or find_tool("cl")) or nil
+        if compiler then
+            table.insert(configs, "-DCMAKE_C_COMPILER=" .. compiler.program)
+            table.insert(configs, "-DCMAKE_CXX_COMPILER=" .. compiler.program)
 
             -- mrbind's own CMakeLists.txt only requests a C++ standard on
-            -- `if(NOT MSVC)` -- its Windows docs assume Clang built against
-            -- MSVC's libraries, not real cl.exe, so the MSVC branch gets no
-            -- flag at all. Left unset, cl.exe silently compiles in a
-            -- pre-C++17 mode and <filesystem> in src/common/filesystem.h
-            -- fails to find std::filesystem at all.
+            -- `if(NOT MSVC)` -- and CMake's MSVC variable is true for
+            -- clang-cl too (its whole point is presenting an MSVC-compatible
+            -- frontend), so this is skipped for both. Left unset, either one
+            -- silently compiles in a pre-C++17 mode and <filesystem> in
+            -- src/common/filesystem.h fails to find std::filesystem at all.
             --
             -- CMAKE_CXX_STANDARD, not a raw /std: flag: CMakeLists.txt never
             -- sets it itself (the assignment is commented out, "old CMake
