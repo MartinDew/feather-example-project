@@ -39,7 +39,21 @@ package("mrbind_generators")
             "-DMRBIND_BUILD_GENERATOR_CSHARP=ON",
         }
 
-        if package:is_plat("windows") then
+        -- os.host(), not package:is_plat("windows"): this is a host = true
+        -- package (tools/SDK/FeatherPluginSDK.lua), meaning it always builds
+        -- for whichever machine is running the build, never for the
+        -- consuming project's configured target. is_plat() answers a
+        -- different question -- what the project's target platform is -- and
+        -- was observed disagreeing with reality here on CI specifically:
+        -- xmake itself logged "checking for platform ... windows (x64)" in
+        -- the same run where is_plat("windows") read false throughout this
+        -- whole on_install, silently skipping every fixup below and then
+        -- failing the assert further down expecting an unsuffixed binary
+        -- name that Windows never produces. os.host() asks the one question
+        -- that actually matters for a host tool and has no such ambiguity --
+        -- the same reasoning tools/SDK/modules/feather_plugin_bindings.lua's
+        -- host_dotnet_rid() already applies to picking a NativeAOT RID.
+        if os.host() == "windows" then
             -- mrbind's own CMakeLists.txt only requests a C++ standard on
             -- `if(NOT MSVC)` -- its Windows docs assume Clang built against
             -- MSVC's libraries, not real cl.exe, so the MSVC branch gets no
@@ -99,16 +113,30 @@ package("mrbind_generators")
         cmake.build(package, configs, {builddir = builddir, cmake_generator = "Ninja"})
 
         -- No install() rules upstream; copy the generators out by hand.
+        --
+        -- Tried without an .exe suffix first when os.host() isn't "windows"
+        -- and with one otherwise, but a mismatch between the two isn't fatal
+        -- on its own: whichever spelling the build actually produced is
+        -- accepted, since a Windows PE binary carries .exe regardless of
+        -- which compiler built it, and the point of the os.host() switch
+        -- above is precisely that this package's own view of "is this
+        -- Windows" cannot always be trusted for that decision either.
         local bindir = package:installdir("bin")
         for _, name in ipairs({"mrbind_gen_c", "mrbind_gen_csharp"}) do
-            local built = path.join(builddir, package:is_plat("windows") and (name .. ".exe") or name)
-            assert(os.isfile(built), "mrbind_generators: expected build output missing: " .. built)
+            local preferred = os.host() == "windows" and (name .. ".exe") or name
+            local fallback = os.host() == "windows" and name or (name .. ".exe")
+            local built = path.join(builddir, preferred)
+            if not os.isfile(built) then
+                built = path.join(builddir, fallback)
+            end
+            assert(os.isfile(built), "mrbind_generators: expected build output missing: "
+                .. path.join(builddir, preferred) .. " (also checked " .. fallback .. ")")
             os.cp(built, bindir)
         end
     end)
 
     on_test(function (package)
         os.vrun(path.join(package:installdir("bin"),
-            "mrbind_gen_c" .. (package:is_plat("windows") and ".exe" or "")) .. " --help")
+            "mrbind_gen_c" .. (os.host() == "windows" and ".exe" or "")) .. " --help")
     end)
 package_end()
