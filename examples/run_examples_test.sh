@@ -185,9 +185,12 @@ echo "running engine headless..."
 ENGINE_LOG="$(mktemp)"
 trap 'rm -f "$ENGINE_LOG"' EXIT
 
-# --dump-db makes the engine print its ClassDB and exit rather than entering
-# the main loop, so this terminates on its own. Headless needs no GPU.
-( cd "$ENGINE_ROOT/build/bin" && timeout 120 stdbuf -oL -eL ./feather "$PROJECT_DIR" -w headless --dump-db ) \
+# --run-frames exits cleanly, through the normal shutdown path, after this many
+# real frames -- unlike --dump-db, which exits before World even enters its
+# init level, so nothing that runs in the frame loop is observable through it.
+# 5 is comfortably past every example's own tick limit (3), so their systems
+# finish running rather than being cut off mid-sequence. Headless needs no GPU.
+( cd "$ENGINE_ROOT/build/bin" && timeout 120 stdbuf -oL -eL ./feather "$PROJECT_DIR" -w headless --run-frames 5 ) \
     > "$ENGINE_LOG" 2>&1
 ENGINE_STATUS=$?
 
@@ -273,6 +276,12 @@ if [ "$RUN_PYTHON" -eq 1 ]; then
     # A field type with no fixed layout is refused by name, not mislaid.
     assert_contains "unstorable field type is refused" "$ENGINE_LOG" \
         "[ecs_demo] string field refused:"
+    # The system actually running, not just registering: three real frames
+    # (--run-frames above), three ticks, each writing through to storage the
+    # next tick reads back -- so this can only pass if the engine's frame loop
+    # ran the scripted system, not merely accepted its registration.
+    assert_contains "scripted system ran and its writes persisted across frames" "$ENGINE_LOG" \
+        "[ecs_demo] tick 3: speed 8.5 offset (13.0, 26.0, 39.0)"
 fi
 
 # The C# plugin declares its component and system with attributes and exports no
@@ -282,6 +291,11 @@ assert_contains "C# component was registered from an attribute" "$ENGINE_LOG" \
     "[cs_example] spin initial speed 0.0 ticks 0 axis <0, 0, 0>"
 assert_contains "C# component round-trips writes" "$ENGINE_LOG" \
     "[cs_example] spin seeded speed 1.0 axis <10, 20, 30>"
+# Same execution proof as the Python system, for the C# one: three frames,
+# three ticks, values accumulated rather than reset, which only a system that
+# actually ran every frame in real ECS storage produces.
+assert_contains "C# system ran and its writes persisted across frames" "$ENGINE_LOG" \
+    "[cs_example] tick 3: speed 8.5 axis <13, 26, 39>"
 
 if [ "$RUN_PYTHON" -eq 1 ]; then
     :

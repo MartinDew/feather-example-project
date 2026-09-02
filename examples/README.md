@@ -96,10 +96,12 @@ load into is reported rather than discovered as a crash.
 `examples/run_examples_test.sh` is the check that all of this actually works. It
 builds every extension from a clean `bin/`, asserts each exports the ABI its
 discovery path requires, asserts none of them link the engine's build tree, runs
-the engine headless, and verifies each was loaded exactly once by the right
-loader and ran at the initialization levels it should. It then compares the
-values every language computes, scoped per language so one cannot satisfy
-another's assertion.
+the engine headless for a few frames (`--run-frames`, below), and verifies each
+was loaded exactly once by the right loader and ran at the initialization levels
+it should. It then compares the values every language computes, scoped per
+language so one cannot satisfy another's assertion -- including each language's
+scripted ECS system, whose ticks have to keep accumulating across those frames
+rather than merely having registered once.
 
     examples/run_examples_test.sh                 # finds a built sibling engine
     examples/run_examples_test.sh /path/to/engine # or name one explicitly
@@ -113,10 +115,13 @@ engine was built without `--enable_py_host`.
 Everything runs when the engine loads this project. Headless needs no GPU:
 
     cd /path/to/FeatherEngine/build/bin
-    ./feather /path/to/feather-example-project -w headless --dump-db
+    ./feather /path/to/feather-example-project -w headless --run-frames 5
 
-`--dump-db` makes the engine print its ClassDB and exit instead of entering the
-main loop, which is what makes this terminate.
+`--run-frames N` exits cleanly, through the normal shutdown path, after `N` real
+frames -- long enough here to see every scripted system's ticks in the log. For
+inspecting the class database instead of running anything, `--dump-db` prints it
+and exits before the world even enters its init level; the two don't compose
+(whichever is given, the engine takes that exit and never reaches the other).
 
 ## Things worth knowing
 
