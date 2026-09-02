@@ -29,6 +29,7 @@ package("mrbind_generators")
 
     on_install(function (package)
         import("package.tools.cmake")
+        import("lib.detect.find_tool")
 
         local configs = {
             "-DCMAKE_BUILD_TYPE=" .. (package:is_debug() and "Debug" or "RelWithDebInfo"),
@@ -39,29 +40,38 @@ package("mrbind_generators")
             "-DMRBIND_BUILD_GENERATOR_CSHARP=ON",
         }
 
-        -- os.host(), not package:is_plat("windows"): this is a host = true
-        -- package (tools/SDK/FeatherPluginSDK.lua), meaning it always builds
-        -- for whichever machine is running the build, never for the
-        -- consuming project's configured target. is_plat() answers a
-        -- different question -- what the project's target platform is -- and
-        -- was observed disagreeing with reality here on CI specifically:
-        -- xmake itself logged "checking for platform ... windows (x64)" in
-        -- the same run where is_plat("windows") read false throughout this
-        -- whole on_install, silently skipping every fixup below and then
-        -- failing the assert further down expecting an unsuffixed binary
-        -- name that Windows never produces. os.host() asks the one question
-        -- that actually matters for a host tool and has no such ambiguity --
-        -- the same reasoning tools/SDK/modules/feather_plugin_bindings.lua's
-        -- host_dotnet_rid() already applies to picking a NativeAOT RID.
-        if os.host() == "windows" then
+        -- Which compiler actually builds this on Windows is not something we
+        -- get to assume -- it depends on what a left-to-its-own-devices CMake
+        -- configure finds first, which varies by machine. On a real Windows
+        -- dev box that's normally cl.exe; on this project's own CI runner,
+        -- Windows LLVM's clang++.exe (installed and put ahead on PATH by the
+        -- workflow itself) is what gets picked instead. The two need opposite
+        -- handling: cl.exe defaults to a pre-C++17 mode with a preprocessor
+        -- that mishandles __VA_OPT__ and needs both worked around explicitly
+        -- (below); clang++ already gets both right unassisted -- confirmed by
+        -- a run where this whole block was accidentally skipped and clang++
+        -- still built and linked both generators cleanly -- and would reject
+        -- the MSVC-syntax flag this block passes outright ("clang++: error:
+        -- no such file or directory: '/Zc:preprocessor'", since a bare
+        -- '/whatever' reads as a path to a GNU-style driver).
+        --
+        -- So rather than pass MSVC flags whenever the host happens to be
+        -- Windows, cl.exe is found and pinned explicitly with find_tool -- the
+        -- same thing that makes the fixes below apply to it specifically,
+        -- deterministic regardless of what else is on PATH or in what order.
+        -- Nothing is added, and CMake configures however it would have
+        -- otherwise, when there is no cl.exe to find.
+        local cl = os.host() == "windows" and find_tool("cl") or nil
+        if cl then
+            table.insert(configs, "-DCMAKE_C_COMPILER=" .. cl.program)
+            table.insert(configs, "-DCMAKE_CXX_COMPILER=" .. cl.program)
+
             -- mrbind's own CMakeLists.txt only requests a C++ standard on
             -- `if(NOT MSVC)` -- its Windows docs assume Clang built against
             -- MSVC's libraries, not real cl.exe, so the MSVC branch gets no
-            -- flag at all. This package deliberately uses the default (real
-            -- MSVC) toolchain instead, since the generators link neither Clang
-            -- nor LLVM and have no reason to need either. Left unset, cl.exe
-            -- silently compiles in a pre-C++17 mode and <filesystem> in
-            -- src/common/filesystem.h fails to find std::filesystem at all.
+            -- flag at all. Left unset, cl.exe silently compiles in a
+            -- pre-C++17 mode and <filesystem> in src/common/filesystem.h
+            -- fails to find std::filesystem at all.
             --
             -- CMAKE_CXX_STANDARD, not a raw /std: flag: CMakeLists.txt never
             -- sets it itself (the assignment is commented out, "old CMake
@@ -99,13 +109,6 @@ package("mrbind_generators")
             -- Set as CMAKE_CXX_FLAGS rather than added to the cleared list
             -- above, since the project appends its own -D_ITERATOR_DEBUG_LEVEL=0
             -- to this same variable and both have to survive.
-            --
-            -- Passed unconditionally: which compiler builds this package is not
-            -- ours to choose (a host package takes the default host toolchain,
-            -- which is cl.exe even when the consuming project is configured for
-            -- clang-cl), and clang-cl accepts the flag as a no-op -- its own
-            -- preprocessor already conforms -- warning only that the argument
-            -- went unused.
             table.insert(configs, "-DCMAKE_CXX_FLAGS=/Zc:preprocessor")
         end
 
