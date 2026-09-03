@@ -1,13 +1,13 @@
--- FeatherPluginSDK: builds Feather extensions written in C or C# against a
+-- FeatherPluginSDK: builds Feather extensions written in C, C++ or C# against a
 -- designated API description file, with no engine checkout involved.
 --
--- This is the counterpart to tools/SDK/FeatherSDK.lua, which builds C++
--- extensions and does need the engine's headers, its compile flags and its
--- reflection codegen. Nothing here needs any of that:
+-- Every language goes through the same door -- the engine's C bindings -- so
+-- none of them needs the engine's headers, its compile flags or its reflection
+-- codegen:
 --
 --   * The engine parsed its own headers once and published the result as
 --     feather_api.json (see the `export-api` task). A plugin turns that JSON
---     into C headers or C# sources with mrbind's generators, which link no
+--     into C headers, C++ wrappers or C# sources with generators that link no
 --     Clang and need no engine source -- so this file, the modules/ and
 --     packages/ directories next to it, and an api/ file are the whole
 --     toolchain.
@@ -42,14 +42,21 @@
 -- CONSUMER's directory instead.
 local SDK_DIR = os.scriptdir()
 
+-- The C++ half of the SDK -- the wrapper generator, its headers and the math
+-- sources -- is optional. A C or C# plugin vendors none of it and must not be
+-- made to build a generator it never runs, nor fetch DirectXMath.
+local HAVE_CPP_SDK = os.isdir(path.join(SDK_DIR, "gen_cpp"))
+
 -- Call once, before any feather_*_plugin().
 function feather_plugin_sdk_init()
     add_moduledirs(path.join(SDK_DIR, "modules"))
     includes(path.join(SDK_DIR, "packages", "mrbind_generators.lua"))
-    -- Header-only, and the C++ wrappers alias its types rather than wrapping
-    -- them; a C or C# plugin never resolves it.
-    includes(path.join(SDK_DIR, "packages", "directxmath.lua"))
-    add_requires("directxmath_feather", {system = false, alias = "directxmath"})
+    if HAVE_CPP_SDK then
+        -- Header-only, and the C++ wrappers alias its types rather than
+        -- wrapping them; a C or C# plugin never resolves it.
+        includes(path.join(SDK_DIR, "packages", "directxmath.lua"))
+        add_requires("directxmath_feather", {system = false, alias = "directxmath"})
+    end
     -- host = true: these are build tools this machine runs, not libraries the
     -- plugin links, so a cross-compiling plugin build still gets runnable ones.
     add_requires("mrbind_generators", {system = false, host = true,
@@ -61,9 +68,8 @@ end
 -- On ELF its feather_* imports stay undefined and bind when the engine dlopens
 -- it, against the engine executable itself -- which exports the generated C
 -- bindings along with the rest of its API (it links -rdynamic, and the bindings
--- are compiled into it). That is the same arrangement C++ extensions use for
--- engine symbols (tools/SDK/FeatherSDK.lua), and it is what keeps a built
--- plugin independent of where the engine lives.
+-- are compiled into it). That is what keeps a built plugin independent of where
+-- the engine lives.
 -- Windows linking is handled in on_config instead (see the module's
 -- apply_windows_link): PE has no load-time binding, so the plugin needs an
 -- import library -- which is generated there from the API descriptor, not
@@ -146,6 +152,11 @@ function feather_cpp_plugin(name, opts)
     -- failing with an opaque error from add_files().
     if not opts.files then
         print("FeatherPluginSDK: feather_cpp_plugin(\"" .. name .. "\") needs opts.files; skipping.")
+        return
+    end
+    if not HAVE_CPP_SDK then
+        print("FeatherPluginSDK: feather_cpp_plugin(\"" .. name .. "\") needs the SDK's C++ half; skipping.")
+        print("FeatherPluginSDK:   vendor cpp/, gen_cpp/ and thirdparty/ alongside modules/ and packages/.")
         return
     end
 
