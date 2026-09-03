@@ -10,11 +10,11 @@ each language actually costs you.
 | `c/c_example.c` | C, against generated C headers | `c/c_example.fext` names the entry point |
 | `csharp/CsExample.cs` | C#, NativeAOT native library | `csharp/cs_example.fext` names the entry point |
 | `python/projection_demo.py` | Python script, run in-process | `python/py_example.fext` names the script |
-| `../src/` | C++, against the engine's own headers | no manifest: probed for `_load_extension` |
+| `cpp/cpp_example.cpp` | C++, against generated C++ wrappers | `cpp/cpp_example.fext` names the entry point |
 
 ## The workflow, and why it looks like this
 
-The C and C# extensions build from **one file: `api/feather_api.json`**, the API
+Every extension here builds from **one file: `api/feather_api.json`**, the API
 description the engine publishes. The SDK in `sdk/` runs mrbind's generators
 over it to produce C headers or C# sources, and that is the whole toolchain --
 no FeatherEngine checkout, no engine headers, no Clang, and nothing linked
@@ -30,13 +30,13 @@ yourself:
 
     readelf -d bin/libc_example.so | grep NEEDED   # nothing feather-related
 
-**Manifests are what let a non-C++ language do this at all.** The older
-discovery path asks a library to export `_load_extension` returning a C++
-`Extension` object -- which C cannot construct and C# can only reach through
-hand-written P/Invoke with delicate ownership rules. A `.fext` manifest names
-the entry point instead, so the engine constructs the object and the extension
-exports one plain function. The C++ example deliberately stays on the old path,
-so this project covers both.
+**Manifests are how the engine finds every one of them.** An older discovery
+path asked a library to export `_load_extension` returning a C++ `Extension`
+object -- which C cannot construct, C# can only reach through hand-written
+P/Invoke with delicate ownership rules, and which forced C++ plugins to share
+the engine's C++ ABI. A `.fext` manifest names the entry point instead, so the
+engine constructs the object and an extension exports one plain function. That
+path is gone; the manifest is the only one.
 
 **Python is not compiled at all.** Its manifest is `"type": "python"`, so the
 engine hands the script to an interpreter embedded in the engine itself
@@ -62,11 +62,14 @@ Then, from this project:
     xmake f -m debug -y
     xmake build
 
-`c_example` needs only a C compiler. `cs_example` needs the .NET SDK on PATH.
-`cpp_example` is the one target that needs the engine checkout, since it
-compiles the engine's real headers; it is discovered as a `FeatherEngine*`
-sibling, or named with `--feather_sdk_path=/path/to/FeatherEngine` or
-`FEATHER_ROOT`. Without one it is skipped and the rest still build.
+`c_example` needs only a C compiler, `cpp_example` only a C++23 one, and
+`cs_example` the .NET SDK on PATH. None of them needs a FeatherEngine checkout.
+
+`cpp_example` differs from the C one only in ergonomics: the generated wrappers
+give it RAII ownership and the engine's own math types (it compiles the same
+SimpleMath sources the engine did, so `Vector3` and friends cross by value),
+but it resolves the same flat `feather_*` C symbols and shares no C++ ABI with
+the engine.
 
 ## Getting `api/`
 

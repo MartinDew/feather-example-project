@@ -1,0 +1,11 @@
+{
+    "fext_version": 1,
+    "name": "cpp_example",
+    "type": "native",
+    "entry": "register_cpp_example",
+    "libraries": {
+        "linux.x86_64": "../../bin/libcpp_example.so",
+        "windows.x86_64": "../../bin/cpp_example.dll",
+        "macos.arm64": "../../bin/libcpp_example.dylib"
+    }
+}

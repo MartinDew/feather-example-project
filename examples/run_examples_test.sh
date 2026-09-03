@@ -119,7 +119,7 @@ cd "$PROJECT_DIR" || exit 2
 # Start from a clean bin/, so a stale plugin from an earlier run cannot pass
 # the test on behalf of one that failed to build this time.
 rm -rf bin
-if ! xmake f -m debug -y --feather_sdk_path="$ENGINE_ROOT" >/dev/null 2>&1 \
+if ! xmake f -m debug -y >/dev/null 2>&1 \
    || ! xmake build -y >/dev/null 2>&1; then
     echo "error: plugin build failed; re-run 'xmake build' here to see why" >&2
     exit 2
@@ -161,14 +161,31 @@ check_export bin/libc_example.so register_c_example
 # plugin's manifest names the same entry point, so there is nothing to keep in
 # sync between the manifest and the source.
 check_export bin/libcs_example.so feather_cs_plugin_entry
-# The C++ example stays on the probing path, so it keeps the older ABI.
-check_export bin/libcpp_example.so _load_extension
-check_export bin/libcpp_example.so _destroy_extension
+check_export bin/libcpp_example.so register_cpp_example
+
+# The legacy exports are gone from the engine, so nothing may still produce
+# them: a plugin that did would be silently ignored rather than probed.
+for sym in _load_extension _destroy_extension; do
+    if nm -D --defined-only bin/libcpp_example.so 2>/dev/null | grep -q " $sym"; then
+        fail "libcpp_example.so still exports $sym"
+    else
+        pass "libcpp_example.so does not export $sym"
+    fi
+done
+
+# The C++ plugin must reach the engine through the same flat C ABI the others
+# do. A mangled feather symbol would mean it went back to sharing a C++ ABI.
+if nm -D --undefined-only bin/libcpp_example.so 2>/dev/null | grep -qE "_ZN7feather|_ZN5flecs"; then
+    fail "libcpp_example.so needs C++ symbols from the engine"
+    nm -D --undefined-only bin/libcpp_example.so | grep -E "_ZN7feather|_ZN5flecs" | head -5 | sed 's/^/       /'
+else
+    pass "libcpp_example.so needs only the flat C ABI"
+fi
 
 # Nothing built here may link the engine's build tree: that is what makes these
 # plugins redistributable, and an accidental rpath or DT_NEEDED would silently
 # tie them to one machine.
-for lib in bin/libc_example.so bin/libcs_example.so; do
+for lib in bin/libc_example.so bin/libcs_example.so bin/libcpp_example.so; do
     [ -f "$lib" ] || continue
     dyn=$(readelf -d "$lib" 2>/dev/null)
     if printf '%s\n' "$dyn" | grep -qE "NEEDED.*feather|RUNPATH.*FeatherEngine|RPATH.*FeatherEngine"; then
@@ -202,14 +219,14 @@ else
 fi
 
 # Which loader claimed each extension matters as much as that it loaded: the
-# manifests must go through FextFormatLoader and the C++ library through the
-# probing path, or the test would still pass with the manifests ignored.
+# every one must go through FextFormatLoader, or the test would still pass
+# with the manifests ignored.
 assert_contains "C plugin loaded from its manifest" "$ENGINE_LOG" \
     "FextFormatLoader: Loaded extension 'c_example'"
 assert_contains "C# plugin loaded from its manifest" "$ENGINE_LOG" \
     "FextFormatLoader: Loaded extension 'cs_example'"
-assert_contains "C++ plugin loaded by symbol probing" "$ENGINE_LOG" \
-    "ExtensionFormatLoader: Loaded extension 'example'"
+assert_contains "C++ plugin loaded from its manifest" "$ENGINE_LOG" \
+    "FextFormatLoader: Loaded extension 'cpp_example'"
 # The bindings are part of the engine binary, so there is nothing to load at
 # startup and no separate library to ship. A stray one next to the engine would
 # mean the old split build came back -- and would be silently preferred by
@@ -225,17 +242,15 @@ fi
 assert_absent "no extension failed to load" "$ENGINE_LOG" "Failed to load library"
 assert_absent "no non-ELF file was opened as a plugin" "$ENGINE_LOG" "invalid ELF header"
 
-assert_contains "C++ plugin ran" "$ENGINE_LOG" "[cpp_example] Hello"
-
 # Each plugin must actually run, at the first init level and the next one.
-for tag in c_example cs_example; do
+for tag in c_example cs_example cpp_example; do
     assert_contains "$tag ran at init level Core"    "$ENGINE_LOG" "[$tag] init level 'Core' entered"
     assert_contains "$tag ran at init level Servers" "$ENGINE_LOG" "[$tag] init level 'Servers' entered"
 done
 
 # A plugin loaded twice means build output leaked into the scanned project
 # directory -- index_project() has no skip list, so this is easy to reintroduce.
-for tag in c_example cs_example; do
+for tag in c_example cs_example cpp_example; do
     count=$(grep -cF "[$tag] init level 'Core' entered" "$ENGINE_LOG")
     if [ "$count" -eq 1 ]; then
         pass "$tag loaded exactly once"
@@ -243,6 +258,29 @@ for tag in c_example cs_example; do
         fail "$tag ran $count times at Core (expected 1; stray copy under the project dir?)"
     fi
 done
+
+# The math types cross as themselves for C++ only: the other languages reach
+# them through accessors. These check the values survive that.
+assert_contains "cpp_example transform position round-tripped" "$ENGINE_LOG" \
+    "[cpp_example]   position          : (2.0000, 3.0000, 4.0000)"
+assert_contains "cpp_example forward vector is correct" "$ENGINE_LOG" \
+    "[cpp_example]   forward           : (0.0000, 0.0000, -1.0000)"
+assert_contains "cpp_example read an opaque Matrix" "$ENGINE_LOG" \
+    "[cpp_example]   matrix translation: (2.0000, 3.0000, 4.0000)"
+
+# The C++ plugin defines ECS types through the same flat ABI C# and Python use.
+assert_contains "cpp_example defined an ECS component" "$ENGINE_LOG" \
+    "[cpp_example] component Whirl registered"
+assert_contains "cpp_example defined a system" "$ENGINE_LOG" \
+    "[cpp_example] system whirl_advance registered"
+assert_contains "cpp_example component starts zero-initialized" "$ENGINE_LOG" \
+    "[cpp_example] whirl initial speed 0.0 ticks 0 axis (0, 0, 0)"
+assert_contains "cpp_example component round-trips writes" "$ENGINE_LOG" \
+    "[cpp_example] whirl seeded speed 1.0 axis (10, 20, 30)"
+# Tick 3 can only appear if the frame loop actually ran the system three times,
+# carrying its own writes forward each frame.
+assert_contains "cpp_example system ran and its writes persisted across frames" "$ENGINE_LOG" \
+    "[cpp_example] tick 3: speed 8.5 axis (13, 26, 39)"
 
 # ── Cross-language agreement ─────────────────────────────────────────────────
 # The three examples compute the same projection. If a binding marshals floats
@@ -252,7 +290,7 @@ echo "cross-language agreement:"
 EXPECTED_FOV="1.0472"
 EXPECTED_ASPECT="1.7778"
 EXPECTED_FOV_X="1.5969"
-TAGS="c_example cs_example"
+TAGS="c_example cs_example cpp_example"
 if [ "$RUN_PYTHON" -eq 1 ]; then
     TAGS="$TAGS py_example"
     assert_contains "python script ran inside the engine" "$ENGINE_LOG" "[py_example]"
