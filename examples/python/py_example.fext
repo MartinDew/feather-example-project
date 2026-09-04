@@ -1,6 +1,0 @@
-{
-    "fext_version": 1,
-    "name": "py_example",
-    "type": "python",
-    "script": "projection_demo.py"
-}

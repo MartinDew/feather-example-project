@@ -58,5 +58,5 @@ if os.isfile(path.join(os.projectdir(), API_JSON)) then
 else
     print("[feather] No " .. API_JSON .. "; skipping the examples.")
     print("[feather] Run `xmake export-api` in a FeatherEngine checkout and copy")
-    print("[feather] its build/bindings/dist/ contents into " .. path.join(os.projectdir(), "api") .. "/")
+    print("[feather] its build/bindings/dist/feather_api.json into " .. path.join(os.projectdir(), "api") .. "/")
 end

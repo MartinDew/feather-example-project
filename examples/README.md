@@ -1,6 +1,6 @@
 # Example extensions
 
-Four extensions, one per language the engine supports, all doing the same small
+Three extensions, one per language the engine supports, all doing the same small
 piece of work -- build a perspective `Projection`, read its properties back,
 derive a reverse-Z variant -- so the files can be read side by side to see what
 each language actually costs you.
@@ -9,7 +9,6 @@ each language actually costs you.
 | --- | --- | --- |
 | `c/c_example.c` | C, against generated C headers | `c/c_example.fext` names the entry point |
 | `csharp/CsExample.cs` | C#, NativeAOT native library | `csharp/cs_example.fext` names the entry point |
-| `python/projection_demo.py` | Python script, run in-process | `python/py_example.fext` names the script |
 | `cpp/cpp_example.cpp` | C++, against generated C++ wrappers | `cpp/cpp_example.fext` names the entry point |
 
 ## The workflow, and why it looks like this
@@ -39,23 +38,14 @@ the engine's C++ ABI. A `.fext` manifest names the entry point instead, so the
 engine constructs the object and an extension exports one plain function. That
 path is gone; the manifest is the only one.
 
-**Python is not compiled at all.** Its manifest is `"type": "python"`, so the
-engine hands the script to an interpreter embedded in the engine itself
-(`modules/py_host`). The script reaches the engine through the `feather` module
-shipped next to the engine binary, which binds to the running process -- so it
-works here and *not* from a standalone interpreter. Being inside a live engine
-is the point: the singletons it touches are the engine's own, already
-initialized.
-
 ## Building
 
 The engine must be built first, with its C bindings:
 
     cd ../FeatherEngine
-    xmake f -m debug -y --enable_py_host=y
-    xmake build feather py_bindings
+    xmake f -m debug -y
+    xmake build feather
 
-`--enable_py_host` and `py_bindings` are only needed for the Python example.
 The C bindings need no separate target: they are part of `feather` itself.
 
 Then, from this project:
@@ -84,26 +74,24 @@ Sparse-checkout state lives in the submodule's local git dir, not in a tracked
 file, so this second step is per-checkout -- run it again after any fresh
 `submodule update --init` on a new clone.
 
-**`api/` is generated, not committed.** A fresh clone has none, and the C and C#
-targets are skipped (with instructions) until you populate it. Everything in it
-is machine-specific -- the metadata records the absolute path and git revision
-of the engine tree that produced it -- so it is regenerated per checkout rather
-than tracked in git.
+**`api/` is generated, not committed.** A fresh clone has none, and the plugin
+targets are skipped (with instructions) until you populate it.
 
 Populate it, and refresh it after any engine API change, with:
 
     cd ../FeatherEngine && xmake export-api
-    cp build/bindings/dist/* ../feather-example-project/api/
+    cp build/bindings/dist/feather_api.json ../feather-example-project/api/
 
-Two files, on every platform -- nothing binary, and no import library. Windows
+One file, on every platform -- nothing binary, and no import library. Windows
 does need one, because a PE image resolves imports through a table the linker
 only writes if it was given one, but the SDK builds it from the generated
 headers at plugin build time rather than shipping it. That keeps the input to a
 plugin the same everywhere: the JSON.
 
-`feather_api.meta.json` records which engine build and mrbind revision produced
-the API file, so a mismatch between your generated headers and the engine you
-load into is reported rather than discovered as a crash.
+The engine rewrites its own checkout path and DirectXMath's out of that file
+before publishing it, leaving the `@feather` and `@directxmath` tokens the SDK
+substitutes back, so the file names no machine and can be committed if you want
+it to be.
 
 ## Testing
 
@@ -121,8 +109,7 @@ rather than merely having registered once.
     examples/run_examples_test.sh /path/to/engine # or name one explicitly
 
 Exits 0 on success, 1 if a check fails (printing expected vs. actual), 2 if the
-engine is missing, naming what to build. The Python checks are skipped when the
-engine was built without `--enable_py_host`.
+engine is missing, naming what to build.
 
 ## Running
 
@@ -140,8 +127,8 @@ and exits before the world even enters its init level; the two don't compose
 ## Things worth knowing
 
 - **Ownership differs sharply.** C hands back heap allocations the caller must
-  pair with `feather_*_Destroy`. C# wraps those in `IDisposable`. Python lets the
-  interpreter's refcount do it. The same sequence appears under all three.
+  pair with `feather_*_Destroy`. C# wraps those in `IDisposable`, and the C++
+  wrappers in ordinary destructors. The same sequence appears under all three.
 - **C# needs an explicit `DllImportResolver`.** The generated `[DllImport]`s name
   `feather_c`, which is not a file on disk at all -- the bindings live in the
   engine binary -- and .NET's default probing would look for a library. Worse, an

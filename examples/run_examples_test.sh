@@ -4,10 +4,8 @@
 # loads each one, that each runs at the init levels it should, and that every
 # language agrees on the values it computes.
 #
-# The C and C# extensions are declared by .fext manifests and build from
-# api/feather_api.json alone. The C++ one is discovered the old way, by probing
-# shared libraries for _load_extension, and is here to prove that path still
-# works untouched.
+# Every extension is declared by a .fext manifest and builds from
+# api/feather_api.json alone -- no engine checkout, no engine headers.
 #
 # Usage: examples/run_examples_test.sh [path/to/FeatherEngine]
 # The engine may also come from $FEATHER_ROOT. It must be built, with its C
@@ -33,13 +31,7 @@ assert_contains() {
 # values -- which is exactly what this test exists to distinguish.
 assert_field() {
     local desc="$1" file="$2" tag="$3" field="$4" want="$5" line
-    # An empty tag means the whole file is the scope (the Python example prints
-    # no prefix); grepping for a literal "[]" would match nothing.
-    if [ -n "$tag" ]; then
-        line=$(grep -F -- "[$tag]" "$file" | grep -F -- "$field" | head -1)
-    else
-        line=$(grep -F -- "$field" "$file" | head -1)
-    fi
+    line=$(grep -F -- "[$tag]" "$file" | grep -F -- "$field" | head -1)
 
     if [ -n "$line" ] && printf '%s' "$line" | grep -qF -- "$want"; then
         pass "$desc"
@@ -102,14 +94,6 @@ if [[ "$engine_exports" != *" T Feather_"* ]]; then
     echo "       It was built without the C bindings; the C and C# examples cannot load." >&2
     echo "         cd $ENGINE_ROOT && xmake f --enable_c_bindings=y -y && xmake build feather" >&2
     exit 2
-fi
-
-# The Python example needs the embedded interpreter (--enable_py_host) and the
-# shipped module; both are optional, so its checks are skipped without them.
-PY_MODULE="$ENGINE_ROOT/build/bin/python/feather.so"
-RUN_PYTHON=0
-if [ -f "$PY_MODULE" ] && [ -f "$PROJECT_DIR/examples/python/py_example.fext" ]; then
-    RUN_PYTHON=1
 fi
 
 # ── Build the plugins ────────────────────────────────────────────────────────
@@ -268,7 +252,7 @@ assert_contains "cpp_example forward vector is correct" "$ENGINE_LOG" \
 assert_contains "cpp_example read an opaque Matrix" "$ENGINE_LOG" \
     "[cpp_example]   matrix translation: (2.0000, 3.0000, 4.0000)"
 
-# The C++ plugin defines ECS types through the same flat ABI C# and Python use.
+# The C++ plugin defines ECS types through the same flat ABI the C# one uses.
 assert_contains "cpp_example defined an ECS component" "$ENGINE_LOG" \
     "[cpp_example] component Whirl registered"
 assert_contains "cpp_example defined a system" "$ENGINE_LOG" \
@@ -291,55 +275,17 @@ EXPECTED_FOV="1.0472"
 EXPECTED_ASPECT="1.7778"
 EXPECTED_FOV_X="1.5969"
 TAGS="c_example cs_example cpp_example"
-if [ "$RUN_PYTHON" -eq 1 ]; then
-    TAGS="$TAGS py_example"
-    assert_contains "python script ran inside the engine" "$ENGINE_LOG" "[py_example]"
-
-    # The .fpy path: no manifest, claimed by extension, and able to define ECS
-    # types rather than only call the engine.
-    assert_contains "bare .fpy script was found and run" "$ENGINE_LOG" \
-        "ScriptFormatLoader: Ran python script"
-    assert_contains "script defined an ECS component" "$ENGINE_LOG" \
-        "[ecs_demo] component Drift registered"
-    assert_contains "script defined a system over its own component" "$ENGINE_LOG" \
-        "[ecs_demo] system advance registered"
-    assert_contains "script defined a system over an engine component" "$ENGINE_LOG" \
-        "[ecs_demo] system over engine Transform registered"
-    # Storage really is the ECS's: zero-initialized on add, and readable back
-    # through the same accessors a system uses.
-    assert_contains "scripted component starts zero-initialized" "$ENGINE_LOG" \
-        "[ecs_demo] initial speed 0.0 steps 0 offset (0.0, 0.0, 0.0)"
-    assert_contains "scripted component round-trips writes" "$ENGINE_LOG" \
-        "[ecs_demo] seeded speed 1.0 offset (10.0, 20.0, 30.0)"
-    # A field type with no fixed layout is refused by name, not mislaid.
-    assert_contains "unstorable field type is refused" "$ENGINE_LOG" \
-        "[ecs_demo] string field refused:"
-    # The system actually running, not just registering: three real frames
-    # (--run-frames above), three ticks, each writing through to storage the
-    # next tick reads back -- so this can only pass if the engine's frame loop
-    # ran the scripted system, not merely accepted its registration.
-    assert_contains "scripted system ran and its writes persisted across frames" "$ENGINE_LOG" \
-        "[ecs_demo] tick 3: speed 8.5 offset (13.0, 26.0, 39.0)"
-fi
-
 # The C# plugin declares its component and system with attributes and exports no
 # entry point of its own; the bootstrap finds them by reflecting over the
-# assembly. Asserted separately from the Python checks, which need py_host.
+# assembly.
 assert_contains "C# component was registered from an attribute" "$ENGINE_LOG" \
     "[cs_example] spin initial speed 0.0 ticks 0 axis <0, 0, 0>"
 assert_contains "C# component round-trips writes" "$ENGINE_LOG" \
     "[cs_example] spin seeded speed 1.0 axis <10, 20, 30>"
-# Same execution proof as the Python system, for the C# one: three frames,
-# three ticks, values accumulated rather than reset, which only a system that
-# actually ran every frame in real ECS storage produces.
+# Execution proof, not just registration: three frames, three ticks, values
+# accumulated rather than reset -- only a system that really ran produces this.
 assert_contains "C# system ran and its writes persisted across frames" "$ENGINE_LOG" \
     "[cs_example] tick 3: speed 8.5 axis <13, 26, 39>"
-
-if [ "$RUN_PYTHON" -eq 1 ]; then
-    :
-else
-    echo "  (python example skipped: no $PY_MODULE)"
-fi
 
 for tag in $TAGS; do
     assert_field "$tag vertical fov is $EXPECTED_FOV rad" "$ENGINE_LOG" "$tag" "vertical fov" "$EXPECTED_FOV"
