@@ -1,0 +1,4 @@
+[submodule "vendor/FeatherEngine"]
+	path = vendor/FeatherEngine
+	url = git@github.com:MartinDew/FeatherEngine.git
+	branch = claude/mrbind-api-bindings-wjry4b

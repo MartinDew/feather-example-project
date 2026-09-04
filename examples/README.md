@@ -15,7 +15,8 @@ each language actually costs you.
 ## The workflow, and why it looks like this
 
 Every extension here builds from **one file: `api/feather_api.json`**, the API
-description the engine publishes. The SDK in `sdk/` runs mrbind's generators
+description the engine publishes. The SDK, pulled in via the `vendor/FeatherEngine`
+submodule (sparse-checked-out to its `tools/SDK`), runs mrbind's generators
 over it to produce C headers or C# sources, and that is the whole toolchain --
 no FeatherEngine checkout, no engine headers, no Clang, and nothing linked
 against the engine at build time. It is the same shape as a GDExtension project
@@ -71,7 +72,17 @@ SimpleMath sources the engine did, so `Vector3` and friends cross by value),
 but it resolves the same flat `feather_*` C symbols and shares no C++ ABI with
 the engine.
 
-## Getting `api/`
+## Getting the SDK and `api/`
+
+The SDK is a submodule, sparse-checked-out to just `tools/SDK` (nothing else in
+the engine tree). A fresh clone needs:
+
+    git submodule update --init
+    cd vendor/FeatherEngine && git sparse-checkout init --cone && git sparse-checkout set tools/SDK
+
+Sparse-checkout state lives in the submodule's local git dir, not in a tracked
+file, so this second step is per-checkout -- run it again after any fresh
+`submodule update --init` on a new clone.
 
 **`api/` is generated, not committed.** A fresh clone has none, and the C and C#
 targets are skipped (with instructions) until you populate it. Everything in it

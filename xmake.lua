@@ -1,8 +1,10 @@
 -- Example Feather extensions, one per supported language. See examples/README.md.
 --
 -- Every example builds against api/feather_api.json -- the API description the
--- engine publishes with `xmake export-api` -- through the vendored SDK in sdk/.
--- None of them needs a FeatherEngine checkout or the engine's headers:
+-- engine publishes with `xmake export-api` -- through the SDK vendored via the
+-- vendor/FeatherEngine submodule (sparse-checked-out to tools/SDK; run
+-- `git submodule update --init` after cloning). None of them needs a
+-- FeatherEngine checkout or the engine's headers:
 -- generating bindings from that one file is the whole toolchain, the way a
 -- GDExtension project works from extension_api.json.
 --
@@ -17,7 +19,7 @@ add_rules("mode.debug", "mode.releasedbg", "mode.release")
 
 -- ---- Language examples, built from the published API ----------------------
 
-includes("sdk/FeatherPluginSDK.lua")
+includes("vendor/FeatherEngine/tools/SDK/FeatherPluginSDK.lua")
 feather_plugin_sdk_init()
 
 local API_JSON = "api/feather_api.json"
