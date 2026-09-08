@@ -57,10 +57,11 @@ Then, from this project:
 `cs_example` the .NET SDK on PATH. None of them needs a FeatherEngine checkout.
 
 `cpp_example` differs from the C one only in ergonomics: the generated wrappers
-give it RAII ownership and the engine's own math types (it compiles the same
-SimpleMath sources the engine did, so `Vector3` and friends cross by value),
-but it resolves the same flat `feather_*` C symbols and shares no C++ ABI with
-the engine.
+give it RAII ownership, the engine's own math types (it compiles the same
+`core/math` sources the engine did, so `Vector3` and friends cross by value),
+and the engine's own `World`/`Entity`/`ComponentHandle` under the engine's own
+method names -- but it resolves the same flat `feather_*` C symbols and shares
+no C++ ABI with the engine.
 
 ## Getting the SDK and `api/`
 

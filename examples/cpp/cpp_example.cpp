@@ -5,7 +5,9 @@
 // classes below are generated over the same flat C entry points the C example
 // calls by hand -- so this shares no C++ ABI with the engine, and needs no
 // FeatherEngine checkout to build. What it gains over the C example is
-// ownership that manages itself and math types that are the engine's own.
+// ownership that manages itself, math types that are the engine's own, and an
+// ECS reached through World, Entity and ComponentHandle exactly as engine code
+// reaches it.
 
 #include <feather_cpp/feather.hpp>
 #include <feather_cpp/plugin.hpp>
@@ -38,7 +40,7 @@ namespace
             reversed.get_near_plane(), reversed.get_far_plane(), reversed.is_reverse_z() ? "yes" : "no");
     }
 
-    // The math types are the engine's own, compiled from the SimpleMath sources
+    // The math types are the engine's own, compiled from the core/math sources
     // the SDK vendors, so they cross the boundary by value rather than as
     // opaque handles.
     void report_transform()
@@ -62,9 +64,10 @@ namespace
             translation.x, translation.y, translation.z);
     }
 
-    // A component and a system defined at runtime, through the same flat ABI
-    // the C# and Python examples use. Mirrors their Spin/Drift components so
-    // the three can be compared against each other.
+    // A component and a system defined at runtime. Only the two definitions go
+    // through the flat ABI; everything after them is the engine's own World,
+    // Entity and ComponentHandle, spelled the way engine code spells them.
+    // Mirrors the C# example's components so the two can be compared.
     void register_ecs()
     {
         const feather::Field fields[] = {
@@ -79,30 +82,36 @@ namespace
         feather::define_system("whirl_advance", components, feather::Phase::OnUpdate,
             [](const feather::Invocation &invocation)
             {
-                const feather::ComponentHandle &whirl = invocation.components[0];
+                feather::ComponentHandle whirl = invocation.entity.component("Whirl");
                 const std::int32_t ticks = whirl.get_int("ticks") + 1;
-                whirl.set("ticks", ticks);
-                whirl.set("speed", whirl.get_float("speed") + 2.5f);
-                whirl.set("axis", whirl.get_vector3("axis") + feather::Vector3(1.0f, 2.0f, 3.0f));
+                whirl.set_int("ticks", ticks);
+                whirl.set_float("speed", whirl.get_float("speed") + 2.5f);
+                whirl.set_vector3("axis", whirl.get_vector3("axis") + feather::Vector3(1.0f, 2.0f, 3.0f));
                 std::printf("[cpp_example] tick %d: speed %.1f axis (%.0f, %.0f, %.0f)\n",
                     ticks, whirl.get_float("speed"),
                     whirl.get_vector3("axis").x, whirl.get_vector3("axis").y, whirl.get_vector3("axis").z);
             });
         std::printf("[cpp_example] system whirl_advance registered\n");
 
-        const feather::Entity entity = feather::create_entity_handle("WhirlDemo");
+        // The world the engine is simulating, reached the way a WorldSim-owning
+        // engine system reaches it.
+        feather::World world = feather::WorldSim::get().get_world();
+        feather::Entity entity = world.create_entity("WhirlDemo");
         entity.add_component("Whirl");
 
-        auto whirl = feather::component_handle(entity.id(), "Whirl");
+        feather::ComponentHandle whirl = entity.component("Whirl");
         std::printf("[cpp_example] whirl initial speed %.1f ticks %d axis (%.0f, %.0f, %.0f)\n",
             whirl.get_float("speed"), whirl.get_int("ticks"),
             whirl.get_vector3("axis").x, whirl.get_vector3("axis").y, whirl.get_vector3("axis").z);
 
-        whirl.set("speed", 1.0f);
-        whirl.set("axis", feather::Vector3(10.0f, 20.0f, 30.0f));
+        whirl.set_float("speed", 1.0f);
+        whirl.set_vector3("axis", feather::Vector3(10.0f, 20.0f, 30.0f));
         std::printf("[cpp_example] whirl seeded speed %.1f axis (%.0f, %.0f, %.0f)\n",
             whirl.get_float("speed"),
             whirl.get_vector3("axis").x, whirl.get_vector3("axis").y, whirl.get_vector3("axis").z);
+
+        std::printf("[cpp_example] entity '%s' in world with %d component types\n",
+            entity.get_name().c_str(), world.get_component_type_count());
     }
 
     // Called once per initialization level the engine enters, ascending. There
