@@ -54,11 +54,12 @@ namespace
         std::printf("[cpp_example]   forward           : (%.4f, %.4f, %.4f)\n",
             forward.x, forward.y, forward.z);
 
-        // Matrix is the one math type that stays opaque in C -- its base holds
-        // an anonymous union -- so it crosses through a pointer and is copied.
+        // Matrix holds RTM's register rows rather than plain reals, so it crosses
+        // through a pointer and is copied rather than passed by value.
         const feather::Matrix matrix = transform.to_matrix_with_scale();
+        const feather::Vector3 translation = matrix.translation();
         std::printf("[cpp_example]   matrix translation: (%.4f, %.4f, %.4f)\n",
-            matrix._41, matrix._42, matrix._43);
+            translation.x, translation.y, translation.z);
     }
 
     // A component and a system defined at runtime, through the same flat ABI
@@ -66,42 +67,42 @@ namespace
     // the three can be compared against each other.
     void register_ecs()
     {
-        const feather::ecs::Field fields[] = {
-            {.name = "speed", .type = feather::ecs::FieldType::Float},
-            {.name = "ticks", .type = feather::ecs::FieldType::Int},
-            {.name = "axis", .type = feather::ecs::FieldType::Vec3},
+        const feather::Field fields[] = {
+            {.name = "speed", .type = feather::FieldType::Float},
+            {.name = "ticks", .type = feather::FieldType::Int},
+            {.name = "axis", .type = feather::FieldType::Vec3},
         };
-        feather::ecs::define_component("Whirl", fields);
+        feather::define_component("Whirl", fields);
         std::printf("[cpp_example] component Whirl registered\n");
 
         const std::string components[] = {"Whirl"};
-        feather::ecs::define_system("whirl_advance", components, feather::ecs::Phase::OnUpdate,
-            [](const feather::ecs::Invocation &invocation)
+        feather::define_system("whirl_advance", components, feather::Phase::OnUpdate,
+            [](const feather::Invocation &invocation)
             {
-                const feather::ecs::ComponentView &whirl = invocation.components[0];
+                const feather::ComponentHandle &whirl = invocation.components[0];
                 const std::int32_t ticks = whirl.get_int("ticks") + 1;
                 whirl.set("ticks", ticks);
                 whirl.set("speed", whirl.get_float("speed") + 2.5f);
-                whirl.set("axis", whirl.get_vec3("axis") + feather::Vector3(1.0f, 2.0f, 3.0f));
+                whirl.set("axis", whirl.get_vector3("axis") + feather::Vector3(1.0f, 2.0f, 3.0f));
                 std::printf("[cpp_example] tick %d: speed %.1f axis (%.0f, %.0f, %.0f)\n",
                     ticks, whirl.get_float("speed"),
-                    whirl.get_vec3("axis").x, whirl.get_vec3("axis").y, whirl.get_vec3("axis").z);
+                    whirl.get_vector3("axis").x, whirl.get_vector3("axis").y, whirl.get_vector3("axis").z);
             });
         std::printf("[cpp_example] system whirl_advance registered\n");
 
-        const std::uint64_t entity = feather::ecs::create_entity("WhirlDemo");
-        feather::ecs::add_component(entity, "Whirl");
+        const feather::Entity entity = feather::create_entity_handle("WhirlDemo");
+        entity.add_component("Whirl");
 
-        auto whirl = feather::ecs::view(entity, "Whirl");
+        auto whirl = feather::component_handle(entity.id(), "Whirl");
         std::printf("[cpp_example] whirl initial speed %.1f ticks %d axis (%.0f, %.0f, %.0f)\n",
             whirl.get_float("speed"), whirl.get_int("ticks"),
-            whirl.get_vec3("axis").x, whirl.get_vec3("axis").y, whirl.get_vec3("axis").z);
+            whirl.get_vector3("axis").x, whirl.get_vector3("axis").y, whirl.get_vector3("axis").z);
 
         whirl.set("speed", 1.0f);
         whirl.set("axis", feather::Vector3(10.0f, 20.0f, 30.0f));
         std::printf("[cpp_example] whirl seeded speed %.1f axis (%.0f, %.0f, %.0f)\n",
             whirl.get_float("speed"),
-            whirl.get_vec3("axis").x, whirl.get_vec3("axis").y, whirl.get_vec3("axis").z);
+            whirl.get_vector3("axis").x, whirl.get_vector3("axis").y, whirl.get_vector3("axis").z);
     }
 
     // Called once per initialization level the engine enters, ascending. There
