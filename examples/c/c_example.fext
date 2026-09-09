@@ -4,8 +4,8 @@
     "type": "native",
     "entry": "register_c_example",
     "libraries": {
-        "linux.x86_64": "../../bin/libc_example.so",
-        "windows.x86_64": "../../bin/c_example.dll",
-        "macos.arm64": "../../bin/libc_example.dylib"
+        "linux.x86_64": "res://bin/libc_example.so",
+        "windows.x86_64": "res://bin/c_example.dll",
+        "macos.arm64": "res://bin/libc_example.dylib"
     }
 }
