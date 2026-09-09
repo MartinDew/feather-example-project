@@ -4,8 +4,8 @@
     "type": "native",
     "entry": "feather_cs_plugin_entry",
     "libraries": {
-        "linux.x86_64": "../../bin/libcs_example.so",
-        "windows.x86_64": "../../bin/cs_example.dll",
-        "macos.arm64": "../../bin/libcs_example.dylib"
+        "linux.x86_64": "res://bin/libcs_example.so",
+        "windows.x86_64": "res://bin/cs_example.dll",
+        "macos.arm64": "res://bin/libcs_example.dylib"
     }
 }
