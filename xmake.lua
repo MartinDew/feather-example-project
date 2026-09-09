@@ -10,7 +10,7 @@
 --
 -- The C++ example is no exception. It calls the same flat C entry points the C
 -- one does, behind generated C++ classes.
-set_xmakever("2.9.0")
+set_xmakever("3.1.0")
 set_project("feather-example-project")
 -- "clatest" keeps the C example on a modern C standard rather than the
 -- toolchain default; the C++ example needs C++23 for the generated wrappers.
@@ -30,30 +30,29 @@ local API_JSON = "api/feather_api.json"
 if os.isfile(path.join(os.projectdir(), API_JSON)) then
 
     -- examples/c -- a Feather extension in plain C.
-    feather_c_plugin("c_example", {
-        files = "examples/c/c_example.c",
-        api_json = API_JSON,
-    })
+    target("c_example")
+        add_rules("feather.plugin.c")
+        add_files("examples/c/c_example.c")
+        set_values("feather.api_json", API_JSON)
 
-    -- examples/csharp -- the same extension in C#, published with NativeAOT so
-    -- the result is an ordinary native shared library.
-    feather_cs_plugin("cs_example", {
-        csproj = "examples/csharp/CsExample.csproj",
-        api_json = API_JSON,
-        -- dotnet names the output after the assembly; the manifest names the
-        -- file the engine loads. Both are left at the SDK's defaults, which
-        -- already vary by host OS to match cs_example.fext's "libraries" table:
-        -- the published assembly is CsExample.{dll,so,dylib}, staged into bin/
-        -- as cs_example.dll on Windows or libcs_example.{so,dylib} elsewhere.
-    })
+    -- examples/csharp -- the same extension in C#. feather.plugin.cs feeds the
+    -- .cs files and the csproj knobs below to xmake's csharp rule, then
+    -- publishes the generated project with NativeAOT so the result is an
+    -- ordinary native shared library. The assembly name is the target name, so
+    -- the published cs_example.{so,dll,dylib} stages into bin/ as
+    -- libcs_example.so / cs_example.dll -- matching cs_example.fext.
+    target("cs_example")
+        add_rules("feather.plugin.cs")
+        add_files("examples/csharp/*.cs")
+        set_values("feather.api_json", API_JSON)
 
     -- examples/cpp -- the same extension in C++, through the generated
     -- wrappers. No engine checkout: it resolves the same feather_* C symbols
     -- the C example does.
-    feather_cpp_plugin("cpp_example", {
-        files = "examples/cpp/cpp_example.cpp",
-        api_json = API_JSON,
-    })
+    target("cpp_example")
+        add_rules("feather.plugin.cpp")
+        add_files("examples/cpp/cpp_example.cpp")
+        set_values("feather.api_json", API_JSON)
 
 else
     print("[feather] No " .. API_JSON .. "; skipping the examples.")
